@@ -111,13 +111,13 @@ class Window:
 # MARK: ClassSelect Class
 class ClassSelect(Window):
     def __init__(self) -> None:
-        super().__init__("科目選択")
+        super().__init__("科目選択", height=240)
         self.select_ClassName = ""
         
         for target in eval(GLOBAL_SETTINGS.get("GENERAL", "CLASS_NAME")):
             button = tkinter.Button(self.root, text=target, font=('MSゴシック', '20'), padx=2, pady=2, relief=tkinter.RAISED, width=18, height=2, background='white')
             button.bind("<ButtonPress>", self._set_className)
-            button.pack(padx=5, pady=10)
+            button.pack(padx=5, pady=5)
     
     def _set_className(self, event):
         self.select_ClassName = event.widget.cget("text")
@@ -222,26 +222,32 @@ class CheckSetting(Window):
         
         self._setting_Logfiles()
         self._write_startlog()
+        self.Close()
         
 class Execute(Window):
-    def __init__(self, checkfolder: Path, inputfolder: Path, logfolder: Path) -> None:
-        # super().__init__(title, width, height)
-        pass
+    def __init__(self, checkfolder: Path, logfiles: Path, inputfolder: Path = None) -> None:
+        self.checkfolder_path = checkfolder
+        self.inputfolder_path = inputfolder
+        self.logfiles = logfiles
+        
+        super().__init__(checkfolder.name)
+        self.Show()
     
 
-def check(classname: str, checkroot: Path, input: Path, log: Path):
-    childtype = GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE")
-    path = get_checkpath(childtype, checkroot)
+def check(classname: str, checkroot: Path, log: Path, input: Path = None):
+    childtype = eval(GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE"))
+    pathlist = get_checkpath(childtype, checkroot)
+    index = 0
+    while 0 <= index < len(pathlist):
+        runner = Execute(pathlist[index], log, input)
+        
     pass
 
-def get_checkpath(type: str, rootpath: Path):
-    if type == "dir":
-        pathlist = [f for f in rootpath.iterdir() if f.is_dir()]
-    elif type == "file":
-        pathlist = [f for f in rootpath.iterdir() if f.is_file()]
-
-    
-
+def get_checkpath(childtype: str, rootpath: Path) -> list:
+    if childtype == "dir":
+        return [f for f in rootpath.iterdir() if f.is_dir()]
+    elif childtype == "file":
+        return [f for f in rootpath.iterdir() if f.is_file() if not f in [".DS_Store", "reportlist.xlsx"]]
 
 # MARK: Main process
 if __name__ == "__main__":
@@ -257,4 +263,5 @@ if __name__ == "__main__":
     # 採点時の設定
     check_setting = CheckSetting(checking_class.select_ClassName)
     
-    check(checking_class.select_ClassName, check_setting.checkfolder_path, check_setting.autoinput_path, check_setting.logfiles)
+    check(checking_class.select_ClassName, check_setting.checkfolder_path, check_setting.logfiles, check_setting.autoinput_path)
+    # check("IP", Path("/Users/nao/Desktop/手伝い/プログラミング基礎/採点/第07回演習/data"))
