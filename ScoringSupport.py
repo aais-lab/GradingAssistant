@@ -9,10 +9,29 @@ from pathlib import Path
 # MARK: Setting Class
 class Settings:
     def __init__(self) -> None:
+        
+        self._shape = {
+                        "General":[
+                                {"name":"UI_MARGIN_BOTTOM", "required":True },
+                                {"name":"CLASS_NAME", "required":True },
+                                {"name":"GENERATE_LOGFILE", "required":True},
+                                {"name":"DEFAULT_SELECT_ROOT_PATH", "required":True}
+                            ],
+                       "Class":[
+                                {"name":"RUN_COMMAND", "required":True},
+                                {"name":"SELECT_ROOT_PATH", "required":False},
+                                {"name":"CHILD_TYPE", "required":True},
+                                {"name":"FILENAME_REGEX", "required":False},
+                                {"name":"FILE_TYPE", "required":False}
+                            ]
+                        }
+        
         self._settings = configparser.ConfigParser()
         self._settings.read('config.ini', encoding='utf-8') 
         self.SOURCE_PATH = Path(__file__).parent
-        self.HOME_PATH = Path.home()       
+        self.HOME_PATH = Path.home()
+        if not self._check():
+            exit()
         
     def get(self, section: str, key: str) -> str | int | None:
         if self.isSettingExists(section, key):
@@ -31,6 +50,27 @@ class Settings:
     
     def get_keyList(self, section: str) -> dict:
         return self._settings.items(section.upper())
+    
+    def _check(self):
+        # general settings check
+        general_keylist = [i[0] for i in self.get_keyList("GENERAL")]
+        for settings in self._shape["General"]:
+            if settings["required"] :
+                if not settings["name"].lower() in general_keylist:
+                    tkinter.Tk().withdraw()
+                    messagebox.showinfo("ERROR","GENERALに必須属性{}が設定されていません".format(settings["name"]))
+                    return False
+        
+        # class settings check
+        for className in eval(self.get("GENERAL", "CLASS_NAME")):
+            class_keylist = [i[0] for i in self.get_keyList(className)]
+            for settings in self._shape["Class"]:
+                if settings["required"] :
+                    if not settings["name"].lower() in class_keylist:
+                        tkinter.Tk().withdraw()
+                        messagebox.showinfo("ERROR","{}に必須属性{}が設定されていません".format(className,settings["name"]))
+                        return False
+        return True
 
 # MARK: Window Class
 class Window:
@@ -182,6 +222,25 @@ class CheckSetting(Window):
         
         self._setting_Logfiles()
         self._write_startlog()
+        
+class Execute(Window):
+    def __init__(self, checkfolder: Path, inputfolder: Path, logfolder: Path) -> None:
+        # super().__init__(title, width, height)
+        pass
+    
+
+def check(classname: str, checkroot: Path, input: Path, log: Path):
+    childtype = GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE")
+    path = get_checkpath(childtype, checkroot)
+    pass
+
+def get_checkpath(type: str, rootpath: Path):
+    if type == "dir":
+        pathlist = [f for f in rootpath.iterdir() if f.is_dir()]
+    elif type == "file":
+        pathlist = [f for f in rootpath.iterdir() if f.is_file()]
+
+    
 
 
 # MARK: Main process
@@ -197,3 +256,5 @@ if __name__ == "__main__":
     
     # 採点時の設定
     check_setting = CheckSetting(checking_class.select_ClassName)
+    
+    check(checking_class.select_ClassName, check_setting.checkfolder_path, check_setting.autoinput_path, check_setting.logfiles)
