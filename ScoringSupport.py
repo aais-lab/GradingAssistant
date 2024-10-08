@@ -240,6 +240,10 @@ class Execute(Window):
         super().__init__(checkfolder.name)
         self.Show()
         
+    # TODO: Windowの大きさを計算する関数
+    def _calc_WindowHeight(self):
+        pass
+        
     # TODO: 必要なファイル一覧をとってくる関数
     def _get_FilePath(self, root: Path, filetype: list) -> list:
         pass
