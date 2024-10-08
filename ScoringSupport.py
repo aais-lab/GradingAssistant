@@ -34,12 +34,12 @@ class Settings:
             exit()
         
     def get(self, section: str, key: str) -> str | int | None:
-        if self.isSettingExists(section, key):
+        if self.exists(section, key):
             return eval(self._settings[section][key])
         else:
             return None
         
-    def isSettingExists(self, section: str, key: str) -> bool:
+    def exists(self, section: str, key: str) -> bool:
         if key.lower() in map(lambda x:x[0], self._settings.items(section)):
             return True
         else:
@@ -48,12 +48,12 @@ class Settings:
     def get_sectionList(self) -> list:
         return self._settings.sections()
     
-    def get_keyList(self, section: str) -> dict:
+    def get_KeyValueList(self, section: str) -> dict:
         return self._settings.items(section.upper())
     
     def _check(self):
         # general settings check
-        general_keylist = [i[0] for i in self.get_keyList("GENERAL")]
+        general_keylist = [i[0] for i in self.get_KeyValueList("GENERAL")]
         for settings in self._shape["General"]:
             if settings["required"] :
                 if not settings["name"].lower() in general_keylist:
@@ -63,7 +63,7 @@ class Settings:
         
         # class settings check
         for className in eval(self.get("GENERAL", "CLASS_NAME")):
-            class_keylist = [i[0] for i in self.get_keyList(className)]
+            class_keylist = [i[0] for i in self.get_KeyValueList(className)]
             for settings in self._shape["Class"]:
                 if settings["required"] :
                     if not settings["name"].lower() in class_keylist:
@@ -84,31 +84,31 @@ class Window:
     def Show(self) -> None :
         self.root.mainloop()
         
-    def write_Log(self, target: str, text: str) -> None:
+    def _write_Log(self, target: str, text: str) -> None:
         with open(target, "a") as f:
             f.write(text + "\n")
             
-    def generate_RuntimeLogtext(self, action: list) -> str:
+    def _generate_RuntimeLogText(self, action: list) -> str:
         log = [str(datetime.datetime.now().replace(microsecond=0))+"\t"] + action
         return "\t".join(log)
     
-    def open_selectFileDialog(self, root: Path) -> Path | None:
+    def _select_File(self, root: Path) -> Path | None:
         path = Path(filedialog.askopenfilename(initialdir=root))
         if not len(str(path)):
             path = None
         return path
     
-    def open_selectDirDialog(self, root: Path) -> Path | None:
+    def _select_Dir(self, root: Path) -> Path | None:
         path = Path(filedialog.askdirectory(initialdir=root))
         if not len(str(path)):
             path = None
         return path
     
-    def show_message(self, title: str, text: str) -> None:
+    def _show_Message(self, title: str, text: str) -> None:
         tkinter.Tk().withdraw()
         messagebox.showinfo(title, text)
     
-    def ask_yesno(self, title: str, text: str) -> bool:
+    def _ask_YesNo(self, title: str, text: str) -> bool:
         tkinter.Tk().withdraw()
         return messagebox.askyesno(title, text)
         
@@ -167,13 +167,13 @@ class CheckSetting(Window):
     def _set_folderpath(self, target: str) -> None:
         def inner():
             # filedialog
-            if  GLOBAL_SETTINGS.isSettingExists(self.target_ClassName, "SELECTROOT_PATH"):
-                folderpath = self.open_selectDirDialog(GLOBAL_SETTINGS.get(self.target_ClassName, "SELECTROOT_PATH"))
-            elif GLOBAL_SETTINGS.isSettingExists("GENERAL", "DEFAULT_SELECT_ROOT_PATH"):
-                folderpath = self.open_selectDirDialog(GLOBAL_SETTINGS.get("GENERAL", "DEFAULT_SELECT_ROOT_PATH"))
+            if  GLOBAL_SETTINGS.exists(self.target_ClassName, "SELECTROOT_PATH"):
+                folderpath = self._select_Dir(GLOBAL_SETTINGS.get(self.target_ClassName, "SELECTROOT_PATH"))
+            elif GLOBAL_SETTINGS.exists("GENERAL", "DEFAULT_SELECT_ROOT_PATH"):
+                folderpath = self._select_Dir(GLOBAL_SETTINGS.get("GENERAL", "DEFAULT_SELECT_ROOT_PATH"))
             else :
-                self.show_message("ERROR","デフォルトパスが設定されていないためホームディレクトリを開きます")
-                folderpath = self.open_selectDirDialog(GLOBAL_SETTINGS.HOME_PATH)
+                self._show_Message("ERROR","デフォルトパスが設定されていないためホームディレクトリを開きます")
+                folderpath = self._select_Dir(GLOBAL_SETTINGS.HOME_PATH)
             
             # error hundring
             if str(folderpath) == ".":
@@ -189,24 +189,24 @@ class CheckSetting(Window):
                 self.checkfolder_label.set(folderpath.name)
         return inner
 
-    def _setting_Logfiles(self,) -> None:
+    def _setup_LogFiles(self,) -> None:
         self.logdir_path = GLOBAL_SETTINGS.SOURCE_PATH.joinpath("log", self.checkfolder_label.get())
         if self.logdir_path.exists():
             for file in self.logdir_path.iterdir():
                 self.logfiles[file.stem] = file
-            self.write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogtext(["Start", str(self.checkfolder_path)]))
+            self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Start", str(self.checkfolder_path)]))
             return
         
         self.logdir_path.mkdir()
         for file in GLOBAL_SETTINGS.get("GENERAL", "GENERATE_LOGFILE"):
             self.logdir_path.joinpath(file+".txt").touch()
             self.logfiles[file] = self.logdir_path.joinpath(file+".txt")
-        self.write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogtext(["Start", str(self.checkfolder_path)]))
-        self.write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogtext(["Create", f"logfiles{list(self.logfiles.keys())} in {self.logdir_path}"]))
+        self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Start", str(self.checkfolder_path)]))
+        self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Create", f"logfiles{list(self.logfiles.keys())} in {self.logdir_path}"]))
             
-    def _write_startlog(self) -> None :
-        log_str = self.generate_RuntimeLogtext(["Write", "CurrentSetting -> " + str(self.logfiles["Settings"])])
-        self.write_Log(self.logfiles["Runtime"] ,log_str)
+    def _write_StartLog(self) -> None :
+        log_str = self._generate_RuntimeLogText(["Write", "CurrentSetting -> " + str(self.logfiles["Settings"])])
+        self._write_Log(self.logfiles["Runtime"] ,log_str)
         
         # CurrentSettingsの書き出し
         log_str = f"[{str(datetime.datetime.now().replace(microsecond=0))}]\n" \
@@ -214,19 +214,19 @@ class CheckSetting(Window):
                     f"\t採点対象：{self.checkfolder_path}\n" \
                     f"\t自動入力：{self.autoinput_path}\n" \
                     f"\tログ出力：{self.logdir_path}\n"
-        self.write_Log(self.logfiles["Settings"] ,log_str)
+        self._write_Log(self.logfiles["Settings"] ,log_str)
     
     def _start_Check(self) -> None:
         if self.checkfolder_path == "":
-            self.show_message("ERROR","採点対象のフォルダが選択されていません")
+            self._show_Message("ERROR","採点対象のフォルダが選択されていません")
             return
         if self.autoinput_path == "":
-            if not self.ask_yesno("", "自動入力対象が選択されていません。採点を開始してもよろしいですか"):
+            if not self._ask_YesNo("", "自動入力対象が選択されていません。採点を開始してもよろしいですか"):
                 return
         self.isStartCheck = 1
         
-        self._setting_Logfiles()
-        self._write_startlog()
+        self._setup_LogFiles()
+        self._write_StartLog()
         self.Close()
         
 class Execute(Window):
@@ -237,6 +237,27 @@ class Execute(Window):
         
         super().__init__(checkfolder.name)
         self.Show()
+        
+    # TODO: 必要なファイル一覧をとってくる関数
+    def _get_FilePath(self, root: Path, filetype: list) -> list:
+        pass
+    
+    # TODO: ファイルタイプをチェックする関数
+    def _isValid_FileType(self, filetype: list) -> bool:
+        pass
+    
+    # TODO: 命名規則をチェックする関数
+    def _isValid_FileName(self, rule: str) -> bool:
+        pass
+          
+    # TODO: 実行関数
+    # TODO: ログ書き出しをするためのデコレータ関数
+    # TODO: 生成したwindowを閉じる関数
+    # TODO: 自動入力の関数
+    # TODO: 先に進む関数
+    # TODO: 戻る関数
+    # TODO: 自動入力ファイルを変更するための関数
+
     
 
 def check(classname: str, checkroot: Path, log: Path, input: Path = None):
