@@ -51,14 +51,17 @@ class Settings:
     def get_KeyValueList(self, section: str) -> dict:
         return self._settings.items(section.upper())
     
+    def _show_Message(self, title: str, text: str) -> None:
+        tkinter.Tk().withdraw()
+        messagebox.showinfo(title, text)
+    
     def _check(self):
         # general settings check
         general_keylist = [i[0] for i in self.get_KeyValueList("GENERAL")]
         for settings in self._shape["General"]:
             if settings["required"] :
                 if not settings["name"].lower() in general_keylist:
-                    tkinter.Tk().withdraw()
-                    messagebox.showinfo("ERROR","GENERALに必須属性{}が設定されていません".format(settings["name"]))
+                    self._show_Message("ERROR","GENERALに必須属性{}が設定されていません".format(settings["name"]))
                     return False
         
         # class settings check
@@ -67,8 +70,7 @@ class Settings:
             for settings in self._shape["Class"]:
                 if settings["required"] :
                     if not settings["name"].lower() in class_keylist:
-                        tkinter.Tk().withdraw()
-                        messagebox.showinfo("ERROR","{}に必須属性{}が設定されていません".format(className,settings["name"]))
+                        self._show_Message("ERROR","{}に必須属性{}が設定されていません".format(className,settings["name"]))
                         return False
         return True
 
