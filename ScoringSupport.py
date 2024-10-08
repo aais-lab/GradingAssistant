@@ -35,7 +35,7 @@ class Settings:
         
     def get(self, section: str, key: str) -> str | int | None:
         if self.isSettingExists(section, key):
-            return self._settings[section][key]
+            return eval(self._settings[section][key])
         else:
             return None
         
@@ -122,7 +122,7 @@ class ClassSelect(Window):
         super().__init__("科目選択", height=240)
         self.select_ClassName = ""
         
-        for target in eval(GLOBAL_SETTINGS.get("GENERAL", "CLASS_NAME")):
+        for target in GLOBAL_SETTINGS.get("GENERAL", "CLASS_NAME"):
             button = tkinter.Button(self.root, text=target, font=('MSゴシック', '20'), padx=2, pady=2, relief=tkinter.RAISED, width=18, height=2, background='white')
             button.bind("<ButtonPress>", self._set_className)
             button.pack(padx=5, pady=5)
@@ -198,7 +198,7 @@ class CheckSetting(Window):
             return
         
         self.logdir_path.mkdir()
-        for file in eval(GLOBAL_SETTINGS.get("GENERAL", "GENERATE_LOGFILE")):
+        for file in GLOBAL_SETTINGS.get("GENERAL", "GENERATE_LOGFILE"):
             self.logdir_path.joinpath(file+".txt").touch()
             self.logfiles[file] = self.logdir_path.joinpath(file+".txt")
         self.write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogtext(["Start", str(self.checkfolder_path)]))
@@ -240,7 +240,7 @@ class Execute(Window):
     
 
 def check(classname: str, checkroot: Path, log: Path, input: Path = None):
-    childtype = eval(GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE"))
+    childtype = GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE")
     pathlist = get_checkpath(childtype, checkroot)
     index = 0
     while 0 <= index < len(pathlist):
