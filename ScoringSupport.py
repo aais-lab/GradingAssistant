@@ -103,6 +103,10 @@ class Window:
         if not len(str(path)):
             path = None
         return path
+    
+    def open_msgDialog(self, title: str, text: str) -> None:
+        tkinter.Tk().withdraw()
+        messagebox.showinfo(title, text)
         
     def Close(self) -> None:
         self.root.destroy()
@@ -164,8 +168,7 @@ class CheckSetting(Window):
             elif GLOBAL_SETTINGS.isSettingExists("GENERAL", "DEFAULT_SELECT_ROOT_PATH"):
                 folderpath = self.open_selectDirDialog(GLOBAL_SETTINGS.get("GENERAL", "DEFAULT_SELECT_ROOT_PATH"))
             else :
-                tkinter.Tk().withdraw()
-                messagebox.showinfo("ERROR","デフォルトパスが設定されていないためホームディレクトリを開きます")
+                self.open_msgDialog("ERROR","デフォルトパスが設定されていないためホームディレクトリを開きます")
                 folderpath = self.open_selectDirDialog(GLOBAL_SETTINGS.HOME_PATH)
             
             # error hundring
@@ -211,8 +214,7 @@ class CheckSetting(Window):
     
     def _start_Check(self) -> None:
         if self.checkfolder_path == "":
-            tkinter.Tk().withdraw()
-            messagebox.showinfo("ERROR","採点対象のフォルダが選択されていません")
+            self.open_msgDialog("ERROR","採点対象のフォルダが選択されていません")
             return
         if self.autoinput_path == "":
             tkinter.Tk().withdraw()
