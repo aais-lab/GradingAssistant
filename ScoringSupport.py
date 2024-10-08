@@ -5,6 +5,9 @@ import datetime
 import configparser
 import re
 from pathlib import Path
+import shutil
+from functools import wraps
+import subprocess
 
 # MARK: Setting Class
 class Settings:
@@ -15,7 +18,9 @@ class Settings:
                                 {"name":"UI_MARGIN_BOTTOM", "required":True },
                                 {"name":"CLASS_NAME", "required":True },
                                 {"name":"GENERATE_LOGFILE", "required":True},
-                                {"name":"DEFAULT_SELECT_ROOT_PATH", "required":True}
+                                {"name":"GENERATE_LOGDIR", "required":False},
+                                {"name":"DEFAULT_SELECT_ROOT_PATH", "required":True},
+                                {"name":"EXCLUDED_FILE_NAME", "required":False}
                             ],
                        "Class":[
                                 {"name":"RUN_COMMAND", "required":True},
@@ -65,7 +70,7 @@ class Settings:
                     return False
         
         # class settings check
-        for className in eval(self.get("GENERAL", "CLASS_NAME")):
+        for className in self.get("GENERAL", "CLASS_NAME"):
             class_keylist = [i[0] for i in self.get_KeyValueList(className)]
             for settings in self._shape["Class"]:
                 if settings["required"] :
@@ -125,13 +130,16 @@ class ClassSelect(Window):
         self.select_ClassName = ""
         
         for target in GLOBAL_SETTINGS.get("GENERAL", "CLASS_NAME"):
-            button = tkinter.Button(self.root, text=target, font=('MSゴシック', '20'), padx=2, pady=2, relief=tkinter.RAISED, width=18, height=2, background='white')
-            button.bind("<ButtonPress>", self._set_className)
-            button.pack(padx=5, pady=5)
+            tkinter.Button(self.root, text=target, font=('MSゴシック', '20'), \
+                            padx=2, pady=2, relief=tkinter.RAISED, width=18, height=2, background='white', \
+                            command=self._set_className(target)) \
+                            .pack(padx=5, pady=5)
     
-    def _set_className(self, event):
-        self.select_ClassName = event.widget.cget("text")
-        self.Close()
+    def _set_className(self, target):
+        def inner():
+            self.select_ClassName = target
+            self.Close()
+        return inner
 
 # MARK: CheckSetting Class
 class CheckSetting(Window):
@@ -169,8 +177,8 @@ class CheckSetting(Window):
     def _set_folderpath(self, target: str) -> None:
         def inner():
             # filedialog
-            if  GLOBAL_SETTINGS.exists(self.target_ClassName, "SELECTROOT_PATH"):
-                folderpath = self._select_Dir(GLOBAL_SETTINGS.get(self.target_ClassName, "SELECTROOT_PATH"))
+            if  GLOBAL_SETTINGS.exists(self.target_ClassName, "SELECT_ROOT_PATH"):
+                folderpath = self._select_Dir(GLOBAL_SETTINGS.get(self.target_ClassName, "SELECT_ROOT_PATH"))
             elif GLOBAL_SETTINGS.exists("GENERAL", "DEFAULT_SELECT_ROOT_PATH"):
                 folderpath = self._select_Dir(GLOBAL_SETTINGS.get("GENERAL", "DEFAULT_SELECT_ROOT_PATH"))
             else :
@@ -203,6 +211,11 @@ class CheckSetting(Window):
         for file in GLOBAL_SETTINGS.get("GENERAL", "GENERATE_LOGFILE"):
             self.logdir_path.joinpath(file+".txt").touch()
             self.logfiles[file] = self.logdir_path.joinpath(file+".txt")
+        if GLOBAL_SETTINGS.exists("GENERAL", "GENERATE_LOGDIR"):
+            for dir in GLOBAL_SETTINGS.get("GENERAL", "GENERATE_LOGDIR"):
+                self.logdir_path.joinpath(dir).mkdir()
+                self.logfiles["dir_"+dir] = self.logdir_path.joinpath(dir)
+                
         self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Start", str(self.checkfolder_path)]))
         self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Create", f"logfiles{list(self.logfiles.keys())} in {self.logdir_path}"]))
             
@@ -230,76 +243,237 @@ class CheckSetting(Window):
         self._setup_LogFiles()
         self._write_StartLog()
         self.Close()
-        
+
+# MARK: Execute Class
 class Execute(Window):
-    def __init__(self, checkfolder: Path, logfiles: Path, inputfolder: Path = None) -> None:
-        self.checkfolder_path = checkfolder
-        self.inputfolder_path = inputfolder
-        self.logfiles = logfiles
+    def __init__(self, checkroot: Path, filetype: list, namingRule: str, runcommand: str, logfiles: Path, inputroot: Path = "") -> None:
+        self.next_index = 0
+        self.current_run_file = ""
+        self.run_window_name = checkroot.name
         
-        super().__init__(checkfolder.name)
+        self.naming_rule = re.compile(namingRule)
+        self.valid_filetype = filetype
+        self.logfiles = logfiles
+        self.run_command = runcommand
+        
+        self.check_files_path = self._get_CheckFilePath(checkroot)
+        if inputroot == "":
+            self.input_files_path = []
+        else:
+            self.input_files_path = self._get_InputFilePath(inputroot)
+        
+        super().__init__(checkroot.name, *self._calc_WindowSize(len(self.check_files_path)+len(self.input_files_path)))
+        
+        RunningFrame = tkinter.Frame(self.root, relief=tkinter.FLAT, background='white')
+        RunningFrame.pack(fill=tkinter.BOTH, pady=10, padx=10)
+        tkinter.Label(RunningFrame, text='実行', font=('MSゴシック', '15', 'bold'), anchor=tkinter.NW, background='white').pack()
+        for file in self.check_files_path:
+            tkinter.Button(RunningFrame, text=file.name, font=('MSゴシック', '20'), \
+                            padx=2, pady=2, relief=tkinter.RAISED, width=18, height=2, background='white', \
+                            command=self._Run_Button(file)) \
+                            .pack(padx=5, pady=5)
+                            
+        # TODO: 採点中に採点対象のフォルダを変更できるようにしたらいいかも
+        InputFrame = tkinter.Frame(self.root, relief=tkinter.FLAT, background='white')
+        InputFrame.pack(fill=tkinter.BOTH, pady=10, padx=10)
+        if len(self.input_files_path) == 0:
+            tkinter.Label(InputFrame, text='自動入力：なし', font=('MSゴシック', '15', 'bold'), anchor=tkinter.NW, background='white').pack()
+        else:
+            tkinter.Label(RunningFrame, text='自動入力', font=('MSゴシック', '15', 'bold'), anchor=tkinter.NW, background='white').pack()
+            for file in self.input_files_path:
+                tkinter.Button(InputFrame, text=file.name, font=('MSゴシック', '20'), \
+                            padx=2, pady=2, relief=tkinter.RAISED, width=18, height=2, background='white', \
+                            command=self._AutoInput_Button(file)) \
+                            .pack(padx=5, pady=5)
+                            
+        progress_frame = tkinter.Frame(self.root, relief=tkinter.FLAT, background='white')
+        progress_frame.pack(fill=tkinter.BOTH, pady=10, padx=10)
+        before_button = tkinter.Button(progress_frame, text="＜", font=('MSゴシック', '20'), padx=2, pady=2, width=8, background='white', command=self._goto_Before)
+        before_button.pack(side=tkinter.LEFT)
+        next_button = tkinter.Button(progress_frame, text="＞", font=('MSゴシック', '20'), padx=2, pady=2, width=8, background='white', command=self._goto_next)
+        next_button.pack(side=tkinter.LEFT)
+        
         self.Show()
         
-    # TODO: Windowの大きさを計算する関数
-    def _calc_WindowHeight(self):
+    def _calc_WindowSize(self, button_cnt):
+        width = 300
+        height = (40 * 2) + (72 * button_cnt) + 80
+        return [width, height]
+    
+    def _get_CheckFilePath(self, root: Path) -> list:
+        exclude_files = GLOBAL_SETTINGS.get("GENERAL", "EXCLUDED_FILE_NAME")
+        for file in [f for f in root.iterdir() if f.is_file() and (not f in exclude_files)]:
+            # ファイル形式チェック
+            if self._isValid_FileType(file):
+                self._TypeOK_(file)
+            else:
+                self._TypeNG_(file)
+            
+            # ファイル命名規則チェック
+            if self._isValid_FileName(file):
+                self._NameOK_(file)
+            else:
+                self._NameNG_(file)
+                
+        return [f for f in root.iterdir() if f.is_file() and (not f in exclude_files)]
+    
+    def _get_InputFilePath(self, root: Path, filetype: list = [".txt", ".json"]) -> list:
+        exclude_files = GLOBAL_SETTINGS.get("GENERAL", "EXCLUDED_FILE_NAME")
+        return [f for f in root.iterdir() if f.is_file() and (not f in exclude_files) and (f.suffix in filetype)]
+            
+    def _NameOK_(self, file: Path):
         pass
+    
+    def _NameNG_(self, file: Path):
+        self._write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name}")
+    
+    def _TypeOK_(self, file: Path):
+        pass
+    
+    def _TypeNG_(self, file: Path):
+        self._write_Log(self.logfiles["Badtype"], f"{file.parent.name}\t{file.name}")
+                
+    def _isValid_FileType(self, file: Path) -> bool:
+        if file.suffix in self.valid_filetype:
+            return True
+        else:
+            return False
+    
+    def _isValid_FileName(self, file: Path) -> bool:
+        if re.fullmatch(self.naming_rule, str(file.stem)):
+            return True
+        else:
+            return False
+    
+    def _Run_Button(self, file: Path):
+        def inner():
+            self.Run(file)
+            log_text = self._generate_RuntimeLogText(["Run", f"{file.parent.name}/{file.name}"])
+            self._write_Log(self.logfiles["Runtime"], log_text)
+            self.current_run_file = file.name
+        return inner
+    
+    def Run(self, file: Path):
+        pass
+    
+    def _AutoInput_Button(self, file: Path):
+        def inner():
+            self.AutoInput(file)
+            log_text = self._generate_RuntimeLogText(["Input", f"{file.parent.name}/{file.name}", "->", self.current_run_file])
+            self._write_Log(self.logfiles["Runtime"], log_text)
+        return inner
+    
+    def AutoInput(self, file: Path):
+        pass
+ 
+    def _close_Window(self,):
+        self.set_CloseScript()
+        subprocess.Popen(["osascript", "-e", self.close_script])
+    
+    def set_CloseScript(self):
+        pass
+    
+    def _goto_next(self):
+        self.next_index = 1
+        self._close_Window()
+        self.Close()
+    
+    def _goto_Before(self):
+        self.next_index = -1
+        self._close_Window()
+        self.Close()
         
-    # TODO: 必要なファイル一覧をとってくる関数
-    def _get_FilePath(self, root: Path, filetype: list) -> list:
-        pass
     
-    # TODO: ファイルタイプをチェックする関数
-    def _isValid_FileType(self, filetype: list) -> bool:
-        pass
+# MARK: IP Execute Class
+class IP_Execute(Execute):
+    def __init__(self, checkfolder: Path, logfiles: list, inputfolder: Path = "") -> None:
+        self.close_script = ""   
+        super().__init__(checkroot = checkfolder, \
+                        filetype = GLOBAL_SETTINGS.get("IP", "FILE_TYPE"), \
+                        namingRule = GLOBAL_SETTINGS.get("IP", "FILENAME_REGEX"), \
+                        runcommand = GLOBAL_SETTINGS.get("IP", "RUN_COMMAND"), \
+                        logfiles = logfiles, \
+                        inputroot = inputfolder 
+                        )
+        
+        self.set_CloseScript()
     
-    # TODO: 命名規則をチェックする関数
-    def _isValid_FileName(self, rule: str) -> bool:
-        pass
+    def _NameNG_(self, file: Path):
+        return super()._NameNG_(file)
     
-    # TODO: ログ書き出しをするためのデコレータ関数    
-    def log(self, ):
-        pass
-          
-    # TODO: 実行関数
-    def run(self,):
-        pass
+    def _NameOK_(self, file: Path):
+        return super()._NameOK_(file)
+    
+    def _TypeNG_(self, file: Path):
+        return super()._TypeNG_(file)
+    
+    def _TypeOK_(self, file: Path):
+        return super()._TypeOK_(file)
+    
+    def Run(self, file: Path):
+        applescript_code = f"""
+                        tell application "Terminal"
+                        activate
+                        set newWindow to do script "{self.run_command} {str(file)}"
+                        set custom title of newWindow to "{self.run_window_name}"
+                        set bounds of front window to {0, 0, 400, 320}
+                        end tell
+                    """
+        subprocess.Popen(["osascript", "-e", applescript_code])
+        return super().Run(file)
+    
+    def AutoInput(self, file: Path):
+        print("autoinput")
+        return super().AutoInput(file)
+    
+    def set_CloseScript(self):
+        self.close_script = f"""
+                tell application "Terminal"
+                set all_windows to every window
+                repeat with cur_window in all_windows
+                    if name of cur_window contains "{self.run_window_name}" then
+                        tell cur_window
+                            activate
+                            tell application "System Events"
+                                keystroke "c" using control down
+                            end tell
+                            delay 1
+                            close cur_window
+                        end tell
+                    end if
+                end repeat
+            end tell
+            """
+        return super().set_CloseScript()
 
-    # TODO: 生成したwindowを閉じる関数
-    def close_RunningWindow(self):
-        pass
-    
-    # TODO: 自動入力の関数
-    def autoInput(self):
-        pass
-    
-    # TODO: 自動入力ファイルを変更するための関数
-    def change_InputFile(self):
-        pass
-    
-    # TODO: 先に進む関数
-    def goto_next(self):
-        pass
-    
-    # TODO: 戻る関数
-    def goto_Before(self):
-        pass
-
-    
-
+# MARK: function
 def check(classname: str, checkroot: Path, log: Path, input: Path = None):
     childtype = GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE")
-    pathlist = get_checkpath(childtype, checkroot)
+    pathlist = get_checkpath(childtype, checkroot, GLOBAL_SETTINGS.get("GENERAL", "EXCLUDE_FILE_NAME"))
     index = 0
-    while 0 <= index < len(pathlist):
-        runner = Execute(pathlist[index], log, input)
+    
+    match classname.upper():
+        case "IP":
+            while 0 <= index < len(pathlist):
+                runner = IP_Execute(pathlist[index], log, input)
+                if runner.next_index == 0:
+                    return
+                index += runner.next_index
+            return
         
-    pass
+        case "AP":
+            return
+        
+        case "MAS":
+            return
+        
+    # pass
 
-def get_checkpath(childtype: str, rootpath: Path) -> list:
+def get_checkpath(childtype: str, rootpath: Path, exclude_files: list) -> list:
     if childtype == "dir":
         return [f for f in rootpath.iterdir() if f.is_dir()]
     elif childtype == "file":
-        return [f for f in rootpath.iterdir() if f.is_file() if not f in [".DS_Store", "reportlist.xlsx"]]
+        return [f for f in rootpath.iterdir() if f.is_file() if not f in exclude_files]
 
 # MARK: Main process
 if __name__ == "__main__":
