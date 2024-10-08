@@ -104,9 +104,13 @@ class Window:
             path = None
         return path
     
-    def open_msgDialog(self, title: str, text: str) -> None:
+    def show_message(self, title: str, text: str) -> None:
         tkinter.Tk().withdraw()
         messagebox.showinfo(title, text)
+    
+    def ask_yesno(self, title: str, text: str) -> bool:
+        tkinter.Tk().withdraw()
+        return messagebox.askyesno(title, text)
         
     def Close(self) -> None:
         self.root.destroy()
@@ -168,7 +172,7 @@ class CheckSetting(Window):
             elif GLOBAL_SETTINGS.isSettingExists("GENERAL", "DEFAULT_SELECT_ROOT_PATH"):
                 folderpath = self.open_selectDirDialog(GLOBAL_SETTINGS.get("GENERAL", "DEFAULT_SELECT_ROOT_PATH"))
             else :
-                self.open_msgDialog("ERROR","デフォルトパスが設定されていないためホームディレクトリを開きます")
+                self.show_message("ERROR","デフォルトパスが設定されていないためホームディレクトリを開きます")
                 folderpath = self.open_selectDirDialog(GLOBAL_SETTINGS.HOME_PATH)
             
             # error hundring
@@ -214,11 +218,10 @@ class CheckSetting(Window):
     
     def _start_Check(self) -> None:
         if self.checkfolder_path == "":
-            self.open_msgDialog("ERROR","採点対象のフォルダが選択されていません")
+            self.show_message("ERROR","採点対象のフォルダが選択されていません")
             return
         if self.autoinput_path == "":
-            tkinter.Tk().withdraw()
-            if not messagebox.askyesno("", "自動入力対象が選択されていません。採点を開始してもよろしいですか"):
+            if not self.ask_yesno("", "自動入力対象が選択されていません。採点を開始してもよろしいですか"):
                 return
         self.isStartCheck = 1
         
