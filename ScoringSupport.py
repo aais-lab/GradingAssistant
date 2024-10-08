@@ -251,14 +251,34 @@ class Execute(Window):
     # TODO: 命名規則をチェックする関数
     def _isValid_FileName(self, rule: str) -> bool:
         pass
+    
+    # TODO: ログ書き出しをするためのデコレータ関数    
+    def log(self, ):
+        pass
           
     # TODO: 実行関数
-    # TODO: ログ書き出しをするためのデコレータ関数
+    def run(self,):
+        pass
+
     # TODO: 生成したwindowを閉じる関数
+    def close_RunningWindow(self):
+        pass
+    
     # TODO: 自動入力の関数
-    # TODO: 先に進む関数
-    # TODO: 戻る関数
+    def autoInput(self):
+        pass
+    
     # TODO: 自動入力ファイルを変更するための関数
+    def change_InputFile(self):
+        pass
+    
+    # TODO: 先に進む関数
+    def goto_next(self):
+        pass
+    
+    # TODO: 戻る関数
+    def goto_Before(self):
+        pass
 
     
 
