@@ -8,6 +8,9 @@ from pathlib import Path
 import shutil
 from functools import wraps
 import subprocess
+import json
+import pyautogui
+import time
 
 # MARK: Setting Class
 class Settings:
@@ -279,7 +282,7 @@ class Execute(Window):
         if len(self.input_files_path) == 0:
             tkinter.Label(InputFrame, text='自動入力：なし', font=('MSゴシック', '15', 'bold'), anchor=tkinter.NW, background='white').pack()
         else:
-            tkinter.Label(RunningFrame, text='自動入力', font=('MSゴシック', '15', 'bold'), anchor=tkinter.NW, background='white').pack()
+            tkinter.Label(InputFrame, text='自動入力', font=('MSゴシック', '15', 'bold'), anchor=tkinter.NW, background='white').pack()
             for file in self.input_files_path:
                 tkinter.Button(InputFrame, text=file.name, font=('MSゴシック', '20'), \
                             padx=2, pady=2, relief=tkinter.RAISED, width=18, height=2, background='white', \
@@ -358,13 +361,54 @@ class Execute(Window):
     
     def _AutoInput_Button(self, file: Path):
         def inner():
-            self.AutoInput(file)
+            json = self._get_InputJsonData(file)
+            for content in json:
+                if content["type"].lower() == "key":
+                    self._autoInput_key(file)
+                elif content["type"].lower() == "text":
+                    self._autoInput_text(content["input"], content["target"])
+                else:
+                    self._show_Message("ERROR", "typeにはkeyもしくはtextを設定してください")
             log_text = self._generate_RuntimeLogText(["Input", f"{file.parent.name}/{file.name}", "->", self.current_run_file])
             self._write_Log(self.logfiles["Runtime"], log_text)
         return inner
     
-    def AutoInput(self, file: Path):
+    def _autoInput_key(self, file: Path):
+        self.set_AutoInputScript_Key()
+        subprocess.Popen(["python", str(self.autoinput_key_scriptfile), str(file)])
+    
+    def set_AutoInputScript_Key(self):
         pass
+    
+    def _autoInput_text(self, contents: list, target: str):
+        inputdata = json.dumps(contents, ensure_ascii=False)
+        if target == "":
+            target = self.current_run_file
+        print(type(target))
+        print(type(inputdata))
+        applescript_code = f"""tell application "Terminal"
+                                    set all_windows to every window
+                                    set target to "{target}"
+                                    set messages to {inputdata}
+                                    repeat with cur_window in all_windows
+                                        if name of cur_window contains target then
+                                            tell cur_window
+                                                repeat with message in messages
+                                                    do script message in selected tab
+                                                    delay 0.2
+                                                end repeat
+                                            end tell
+                                        end if
+                                    end repeat
+                                end tell
+                            """
+        print(applescript_code)
+        subprocess.Popen(["osascript", "-e", applescript_code])
+    
+    def _get_InputJsonData(self, file: Path) -> json:
+        with open(file, 'r') as f:
+            data = json.load(f)
+        return data
  
     def _close_Window(self,):
         self.set_CloseScript()
@@ -387,7 +431,9 @@ class Execute(Window):
 # MARK: IP Execute Class
 class IP_Execute(Execute):
     def __init__(self, checkfolder: Path, logfiles: list, inputfolder: Path = "") -> None:
-        self.close_script = ""   
+        self.close_script = ""
+        self.autoinput_key_scriptfile = ""
+        
         super().__init__(checkroot = checkfolder, \
                         filetype = GLOBAL_SETTINGS.get("IP", "FILE_TYPE"), \
                         namingRule = GLOBAL_SETTINGS.get("IP", "FILENAME_REGEX"), \
@@ -397,6 +443,7 @@ class IP_Execute(Execute):
                         )
         
         self.set_CloseScript()
+        self.set_AutoInputScript_Key()
     
     def _NameNG_(self, file: Path):
         return super()._NameNG_(file)
@@ -415,16 +462,16 @@ class IP_Execute(Execute):
                         tell application "Terminal"
                         activate
                         set newWindow to do script "{self.run_command} {str(file)}"
-                        set custom title of newWindow to "{self.run_window_name}"
-                        set bounds of front window to {0, 0, 400, 320}
+                        set custom title of newWindow to "{self.run_window_name}/{file.name}"
+                        set bounds of front window to {0, 550, 500, 900}
                         end tell
                     """
         subprocess.Popen(["osascript", "-e", applescript_code])
-        return super().Run(file)
+        return super().Run(file)    
     
-    def AutoInput(self, file: Path):
-        print("autoinput")
-        return super().AutoInput(file)
+    def set_AutoInputScript_Key(self):
+        self.autoinput_key_scriptfile = Path("./autoinput_code/autoinput_key.py").absolute()
+        return super().set_AutoInputScript_Key()
     
     def set_CloseScript(self):
         self.close_script = f"""
