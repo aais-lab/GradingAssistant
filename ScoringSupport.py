@@ -102,10 +102,16 @@ class Window:
         log = [str(datetime.datetime.now().replace(microsecond=0))+"\t"] + action
         return "\t".join(log)
     
-    def _select_File(self, root: Path) -> Path | None:
-        path = Path(filedialog.askopenfilename(initialdir=root))
+    def _select_File(self, root: Path, any: bool = False) -> Path | None:
+        if any:
+            path = [Path(p) for p in filedialog.askopenfilenames(initialdir=root)]
+            pass
+        else:
+            path = Path(filedialog.askopenfilename(initialdir=root))
+            
         if not len(str(path)):
             path = None
+                
         return path
     
     def _select_Dir(self, root: Path) -> Path | None:
@@ -259,6 +265,8 @@ class Execute(Window):
         self.logfiles = logfiles
         self.run_command = runcommand
         
+        self.exclude_files = GLOBAL_SETTINGS.get("GENERAL", "EXCLUDED_FILE_NAME")
+        
         self.check_files_path = self._get_CheckFilePath(checkroot)
         if inputroot == "":
             self.input_files_path = []
@@ -304,25 +312,25 @@ class Execute(Window):
         return [width, height]
     
     def _get_CheckFilePath(self, root: Path) -> list:
-        exclude_files = GLOBAL_SETTINGS.get("GENERAL", "EXCLUDED_FILE_NAME")
-        for file in [f for f in root.iterdir() if f.is_file() and (not f in exclude_files)]:
+        for file in [f for f in root.iterdir() if f.is_file() and (not f in self.exclude_files)]:
             # ファイル形式チェック
             if self._isValid_FileType(file):
                 self._TypeOK_(file)
             else:
                 self._TypeNG_(file)
-            
+        
+        for file in [f for f in root.iterdir() if f.is_file() and (not f in self.exclude_files)]:
             # ファイル命名規則チェック
             if self._isValid_FileName(file):
                 self._NameOK_(file)
             else:
                 self._NameNG_(file)
                 
-        return [f for f in root.iterdir() if f.is_file() and (not f in exclude_files)]
+        return [f for f in root.iterdir() if f.is_file() and (not f in self.exclude_files)]
     
-    def _get_InputFilePath(self, root: Path, filetype: list = [".txt", ".json"]) -> list:
+    def _get_InputFilePath(self, root: Path, filetype: list = [".json"]) -> list:
         exclude_files = GLOBAL_SETTINGS.get("GENERAL", "EXCLUDED_FILE_NAME")
-        return [f for f in root.iterdir() if f.is_file() and (not f in exclude_files) and (f.suffix in filetype)]
+        return [f for f in root.iterdir() if f.is_file() and (not f in self.exclude_files) and (f.suffix in filetype)]
             
     def _NameOK_(self, file: Path):
         pass
@@ -402,7 +410,6 @@ class Execute(Window):
                                     end repeat
                                 end tell
                             """
-        print(applescript_code)
         subprocess.Popen(["osascript", "-e", applescript_code])
     
     def _get_InputJsonData(self, file: Path) -> json:
@@ -451,11 +458,64 @@ class IP_Execute(Execute):
     def _NameOK_(self, file: Path):
         return super()._NameOK_(file)
     
+    def _TypeOK_(self, file: Path):
+        # TODO:zipを許容して入ってきたやつがzipだった時の処理（13週目の時計を想定）
+        return super()._TypeOK_(file)
+    
     def _TypeNG_(self, file: Path):
+        # valid filetype: .py
+        movepath = self.logfiles["dir_Badtype"].joinpath(file.parent.name)
+        if not movepath.exists():
+                movepath.mkdir()
+        if file.suffix == ".zip":
+            # 展開して中身を確認
+            shutil.unpack_archive(file, file.parent.joinpath("unzip"))
+            
+            # zipをbadtypeへ移動
+            shutil.move(file, movepath)
+            
+            # 展開先pathを格納
+            unzippath = file.parent.joinpath("unzip")
+            # ディレクトリが出てきたらunzipに移動
+            if unzippath.joinpath(file.stem).is_dir():
+                shutil.copytree(unzippath.joinpath(file.stem), unzippath, dirs_exist_ok=True)
+                shutil.rmtree(unzippath.joinpath(file.stem))
+            # そのまま移動できる採点対象の形式のやつはそのまま移動（.py）
+            for innerfile in [f for f in unzippath.iterdir() if f.is_file() and (not f in self.exclude_files)]:
+                if innerfile.suffix in self.valid_filetype:
+                    shutil.move(innerfile, innerfile.parent.parent.joinpath(innerfile.name))
+            # dataフォルダがあった場合はそのまま採点対象フォルダに移動
+            if self._is_dataDirectory_exists(unzippath):
+                if self._is_dataDirectory_exists(unzippath.parent):
+                    shutil.copytree(unzippath.joinpath("data"), unzippath.parent.joinpath("data"), dirs_exist_ok=True)
+                else:
+                    shutil.move(unzippath.joinpath("data"), unzippath.parent.joinpath("data"))
+            shutil.rmtree(unzippath)
+        # .txtと拡張子なしは想定してるので.pyに変えてコピーを作成
+        elif file.suffix in [".txt",""]:
+            shutil.copy(file, file.with_suffix(".py"))
+            
+            # コピー元のファイルを削除
+            if file.suffix == "":
+                # 拡張子なしの場合はディレクトリとして認識されるので一旦.txtをつけてから移動して消す
+                file.rename(movepath.joinpath(file.with_suffix(".txt").name))
+                movepath.joinpath(file.with_suffix(".txt").name).rename(movepath.joinpath(file.name))
+            else:
+                # 拡張子があるやつは移動
+                shutil.move(file, movepath)
+        else:
+            # どういう状態のファイルかわかんないので移動は人間に任せる
+            self._show_Message("Wait!", "想定していない形式があります。\n対応が終了するまでダイアログを消さないでください！\n\"{}\"".format(file.parent.name))
+            shutil.move(file, movepath)
+            
         return super()._TypeNG_(file)
     
-    def _TypeOK_(self, file: Path):
-        return super()._TypeOK_(file)
+    def _is_dataDirectory_exists(self, unzippath: Path) -> bool:
+        path = [f for f in unzippath.iterdir() if f.is_dir() and (f.name == "data")]
+        if len(path):
+            return True
+        else:
+            return False
     
     def Run(self, file: Path):
         applescript_code = f"""
@@ -513,8 +573,6 @@ def check(classname: str, checkroot: Path, log: Path, input: Path = None):
         
         case "MAS":
             return
-        
-    # pass
 
 def get_checkpath(childtype: str, rootpath: Path, exclude_files: list) -> list:
     if childtype == "dir":
