@@ -456,6 +456,7 @@ class IP_Execute(Execute):
         return super()._NameNG_(file)
     
     def _NameOK_(self, file: Path):
+        
         return super()._NameOK_(file)
     
     def _TypeOK_(self, file: Path):
@@ -479,6 +480,7 @@ class IP_Execute(Execute):
                 else:
                     shutil.move(unzippath.joinpath("data"), unzippath.parent.joinpath("data"))
             shutil.rmtree(unzippath)
+            shutil.rmtree(file)
             
         return super()._TypeOK_(file)
     
