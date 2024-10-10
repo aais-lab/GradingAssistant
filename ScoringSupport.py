@@ -6,11 +6,8 @@ import configparser
 import re
 from pathlib import Path
 import shutil
-from functools import wraps
 import subprocess
 import json
-import pyautogui
-import time
 
 # MARK: Setting Class
 class Settings:
@@ -94,11 +91,11 @@ class Window:
     def Show(self) -> None :
         self.root.mainloop()
         
-    def _write_Log(self, target: str, text: str) -> None:
+    def Write_Log(self, target: str, text: str) -> None:
         with open(target, "a") as f:
             f.write(text + "\n")
             
-    def _generate_RuntimeLogText(self, action: list) -> str:
+    def generate_RuntimeLogText(self, action: list) -> str:
         log = [str(datetime.datetime.now().replace(microsecond=0))+"\t"] + action
         return "\t".join(log)
     
@@ -216,7 +213,7 @@ class CheckSetting(Window):
                     self.logfiles[file.stem] = file
                 else :
                     self.logfiles["dir_" + file.stem] = file
-            self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Start", str(self.checkfolder_path)]))
+            self.Write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogText(["Start", str(self.checkfolder_path)]))
             return
         
         self.logdir_path.mkdir()
@@ -228,12 +225,12 @@ class CheckSetting(Window):
                 self.logdir_path.joinpath(dir).mkdir()
                 self.logfiles["dir_"+dir] = self.logdir_path.joinpath(dir)
                 
-        self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Start", str(self.checkfolder_path)]))
-        self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Create", f"logfiles{list(self.logfiles.keys())} in {self.logdir_path}"]))
+        self.Write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogText(["Start", str(self.checkfolder_path)]))
+        self.Write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogText(["Create", f"logfiles{list(self.logfiles.keys())} in {self.logdir_path}"]))
             
     def _write_StartLog(self) -> None :
-        log_str = self._generate_RuntimeLogText(["Write", "CurrentSetting -> " + str(self.logfiles["Settings"])])
-        self._write_Log(self.logfiles["Runtime"] ,log_str)
+        log_str = self.generate_RuntimeLogText(["Write", "CurrentSetting -> " + str(self.logfiles["Settings"]), "\n"])
+        self.Write_Log(self.logfiles["Runtime"] ,log_str)
         
         # CurrentSettingsの書き出し
         log_str = f"[{str(datetime.datetime.now().replace(microsecond=0))}]\n" \
@@ -241,7 +238,7 @@ class CheckSetting(Window):
                     f"\t採点対象：{self.checkfolder_path}\n" \
                     f"\t自動入力：{self.autoinput_path}\n" \
                     f"\tログ出力：{self.logdir_path}\n"
-        self._write_Log(self.logfiles["Settings"] ,log_str)
+        self.Write_Log(self.logfiles["Settings"] ,log_str)
     
     def _start_Check(self) -> None:
         if self.checkfolder_path == "":
@@ -315,7 +312,7 @@ class Execute(Window):
         return [width, height]
     
     def _get_CheckFilePath(self, root: Path) -> list:
-        self._write_Log(self.logfiles["Submit"], root.name + "\t:\t" + " , ".join([str(f.name) for f in self._get_ValidFilePath(root)]))
+        self.Write_Log(self.logfiles["Submit"], root.name + "\t:\t" + " , ".join([str(f.name) for f in self._get_ValidFilePath(root)]))
         for file in self._get_ValidFilePath(root):
             # ファイル形式チェック
             if self._isValid_FileType(file):
@@ -342,13 +339,13 @@ class Execute(Window):
         pass
     
     def _NameNG_(self, file: Path):
-        self._write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name}")
+        self.Write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name}")
     
     def _TypeOK_(self, file: Path):
         pass
     
     def _TypeNG_(self, file: Path):
-        self._write_Log(self.logfiles["Badtype"], f"{file.parent.name}\t{file.name}")
+        self.Write_Log(self.logfiles["Badtype"], f"{file.parent.name}\t{file.name}")
                 
     def _isValid_FileType(self, file: Path) -> bool:
         if file.suffix in self.valid_filetype:
@@ -365,8 +362,8 @@ class Execute(Window):
     def _Run_Button(self, file: Path):
         def inner():
             self.Run(file)
-            log_text = self._generate_RuntimeLogText(["Run", f"{file.parent.name}/{file.name}"])
-            self._write_Log(self.logfiles["Runtime"], log_text)
+            log_text = self.generate_RuntimeLogText(["Run", f"{file.parent.name}/{file.name}"])
+            self.Write_Log(self.logfiles["Runtime"], log_text)
             self.current_run_file = file.name
         return inner
     
@@ -383,8 +380,8 @@ class Execute(Window):
                     self._autoInput_text(content["input"], content["target"])
                 else:
                     self._show_Message("ERROR", "typeにはkeyもしくはtextを設定してください")
-            log_text = self._generate_RuntimeLogText(["Input", f"{file.parent.name}/{file.name}", "->", self.current_run_file])
-            self._write_Log(self.logfiles["Runtime"], log_text)
+            log_text = self.generate_RuntimeLogText(["Input", f"{file.parent.name}/{file.name}", "->", self.current_run_file])
+            self.Write_Log(self.logfiles["Runtime"], log_text)
         return inner
     
     def _autoInput_key(self, file: Path):
@@ -433,14 +430,15 @@ class Execute(Window):
     def _goto_next(self):
         self.next_index = 1
         self._close_Window()
+        self.Write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogText(["End", self.run_window_name, "\n"]))
         self.Close()
     
     def _goto_Before(self):
         self.next_index = -1
         self._close_Window()
+        self.Write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogText(["End", self.run_window_name, "\n"]))
         self.Close()
         
-    
 # MARK: IP Execute Class
 class IP_Execute(Execute):
     def __init__(self, checkfolder: Path, logfiles: list, inputfolder: Path = "") -> None:
@@ -462,7 +460,7 @@ class IP_Execute(Execute):
         studentNum = re.findall(r"\d{2}C\d{4}", file.parent.name)
         studentNum.append(str(*studentNum).lower())
         if not re.search("|".join(studentNum), file.name):
-            self._write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name} 提出フォルダと学番が一致しません")
+            self.Write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name} 提出フォルダと学番が一致しません")
         return super()._NameOK_(file)
     
     def _NameNG_(self, file: Path):
@@ -593,6 +591,7 @@ def check(classname: str, checkroot: Path, log: Path, input: Path = None):
             while 0 <= index < len(pathlist):
                 runner = IP_Execute(pathlist[index], log, input)
                 if runner.next_index == 0:
+                    runner.Write_Log(runner.logfiles["Runtime"], runner.generate_RuntimeLogText(["End", checkroot]))
                     runner.Close()
                     return
                 index += runner.next_index
@@ -625,6 +624,6 @@ if __name__ == "__main__":
     check_setting = CheckSetting(checking_class.select_ClassName)
     
     check(checking_class.select_ClassName, check_setting.checkfolder_path, check_setting.logfiles, check_setting.autoinput_path)
-    # check("IP", Path("/Users/nao/Desktop/手伝い/プログラミング基礎/採点/第07回演習/data"))
+
     tkinter.Tk().withdraw()
     messagebox.showinfo("", "お疲れ様でした")
