@@ -456,11 +456,13 @@ class IP_Execute(Execute):
         return super()._NameNG_(file)
     
     def _NameOK_(self, file: Path):
-        
+        studentNum = re.findall(r"\d{2}C\d{4}", file.parent.name)
+        studentNum.append(str(*studentNum).lower())
+        if not re.search("|".join(studentNum), file.name):
+            self._write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name} 提出フォルダと学番が一致しません")
         return super()._NameOK_(file)
     
     def _TypeOK_(self, file: Path):
-        # TODO:zipを許容して入ってきたやつがzipだった時の処理（13週目の時計を想定）
         if file.suffix == ".zip":
             shutil.unpack_archive(file, file.parent.joinpath("unzip"))
             unzippath = file.parent.joinpath("unzip")
