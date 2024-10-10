@@ -460,6 +460,26 @@ class IP_Execute(Execute):
     
     def _TypeOK_(self, file: Path):
         # TODO:zipを許容して入ってきたやつがzipだった時の処理（13週目の時計を想定）
+        if file.suffix == ".zip":
+            shutil.unpack_archive(file, file.parent.joinpath("unzip"))
+            unzippath = file.parent.joinpath("unzip")
+            
+            # ディレクトリが出てきたらunzipに移動
+            if unzippath.joinpath(file.stem).is_dir():
+                shutil.copytree(unzippath.joinpath(file.stem), unzippath, dirs_exist_ok=True)
+                shutil.rmtree(unzippath.joinpath(file.stem))
+            # そのまま移動できる採点対象の形式のやつはそのまま移動（.py）
+            for innerfile in [f for f in unzippath.iterdir() if f.is_file() and (not f in self.exclude_files)]:
+                if innerfile.suffix in self.valid_filetype:
+                    shutil.move(innerfile, innerfile.parent.parent.joinpath(innerfile.name))
+            # dataフォルダがあった場合はそのまま採点対象フォルダに移動
+            if self._is_dataDirectory_exists(unzippath):
+                if self._is_dataDirectory_exists(unzippath.parent):
+                    shutil.copytree(unzippath.joinpath("data"), unzippath.parent.joinpath("data"), dirs_exist_ok=True)
+                else:
+                    shutil.move(unzippath.joinpath("data"), unzippath.parent.joinpath("data"))
+            shutil.rmtree(unzippath)
+            
         return super()._TypeOK_(file)
     
     def _TypeNG_(self, file: Path):
@@ -491,6 +511,7 @@ class IP_Execute(Execute):
                 else:
                     shutil.move(unzippath.joinpath("data"), unzippath.parent.joinpath("data"))
             shutil.rmtree(unzippath)
+            
         # .txtと拡張子なしは想定してるので.pyに変えてコピーを作成
         elif file.suffix in [".txt",""]:
             shutil.copy(file, file.with_suffix(".py"))
