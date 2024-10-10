@@ -152,7 +152,7 @@ class ClassSelect(Window):
 
 # MARK: CheckSetting Class
 class CheckSetting(Window):
-    def __init__(self, ClassName) -> None:
+    def __init__(self, ClassName: str) -> None:
         super().__init__(ClassName+" 採点設定", height=400)
         
         self.target_ClassName = ClassName
@@ -209,10 +209,13 @@ class CheckSetting(Window):
         return inner
 
     def _setup_LogFiles(self,) -> None:
-        self.logdir_path = GLOBAL_SETTINGS.SOURCE_PATH.joinpath("log", self.checkfolder_label.get())
+        self.logdir_path = GLOBAL_SETTINGS.SOURCE_PATH.joinpath("log", self.target_ClassName+"_"+self.checkfolder_label.get())
         if self.logdir_path.exists():
             for file in self.logdir_path.iterdir():
-                self.logfiles[file.stem] = file
+                if file.is_file():
+                    self.logfiles[file.stem] = file
+                else :
+                    self.logfiles["dir_" + file.stem] = file
             self._write_Log(self.logfiles["Runtime"], self._generate_RuntimeLogText(["Start", str(self.checkfolder_path)]))
             return
         
@@ -267,7 +270,7 @@ class Execute(Window):
         
         self.exclude_files = GLOBAL_SETTINGS.get("GENERAL", "EXCLUDED_FILE_NAME")
         
-        self.check_files_path = self._get_CheckFilePath(checkroot)
+        self.check_files_path = self._get_CheckFilePath(checkroot)        
         if inputroot == "":
             self.input_files_path = []
         else:
@@ -312,25 +315,28 @@ class Execute(Window):
         return [width, height]
     
     def _get_CheckFilePath(self, root: Path) -> list:
-        for file in [f for f in root.iterdir() if f.is_file() and (not f in self.exclude_files)]:
+        self._write_Log(self.logfiles["Submit"], root.name + "\t:\t" + " , ".join([str(f.name) for f in self._get_ValidFilePath(root)]))
+        for file in self._get_ValidFilePath(root):
             # ファイル形式チェック
             if self._isValid_FileType(file):
                 self._TypeOK_(file)
             else:
                 self._TypeNG_(file)
         
-        for file in [f for f in root.iterdir() if f.is_file() and (not f in self.exclude_files)]:
+        for file in self._get_ValidFilePath(root):
             # ファイル命名規則チェック
             if self._isValid_FileName(file):
                 self._NameOK_(file)
             else:
                 self._NameNG_(file)
                 
-        return [f for f in root.iterdir() if f.is_file() and (not f in self.exclude_files)]
+        return self._get_ValidFilePath(root)
+    
+    def _get_ValidFilePath(self, root: Path):
+        return sorted([f for f in root.iterdir() if f.is_file() and (not f.name in self.exclude_files)])
     
     def _get_InputFilePath(self, root: Path, filetype: list = [".json"]) -> list:
-        exclude_files = GLOBAL_SETTINGS.get("GENERAL", "EXCLUDED_FILE_NAME")
-        return [f for f in root.iterdir() if f.is_file() and (not f in self.exclude_files) and (f.suffix in filetype)]
+        return [f for f in self._get_ValidFilePath(root) if (f.suffix in filetype)]
             
     def _NameOK_(self, file: Path):
         pass
@@ -461,7 +467,7 @@ class IP_Execute(Execute):
     
     def _NameNG_(self, file: Path):
         # ファイル名のスペースをとりあえず置き換える
-        file.rename(file.with_name(file.name.replace(" ","_")))
+        file.rename(file.with_name(str(file.name).replace(" ","_").replace("(","_").replace(")","_")))
         return super()._NameNG_(file)
     
     def _TypeOK_(self, file: Path):
@@ -474,7 +480,7 @@ class IP_Execute(Execute):
                 shutil.copytree(unzippath.joinpath(file.stem), unzippath, dirs_exist_ok=True)
                 shutil.rmtree(unzippath.joinpath(file.stem))
             # そのまま移動できる採点対象の形式のやつはそのまま移動（.py）
-            for innerfile in [f for f in unzippath.iterdir() if f.is_file() and (not f in self.exclude_files)]:
+            for innerfile in self._get_ValidFilePath(unzippath):
                 if innerfile.suffix in self.valid_filetype:
                     shutil.move(innerfile, innerfile.parent.parent.joinpath(innerfile.name))
             # dataフォルダがあった場合はそのまま採点対象フォルダに移動
@@ -507,7 +513,7 @@ class IP_Execute(Execute):
                 shutil.copytree(unzippath.joinpath(file.stem), unzippath, dirs_exist_ok=True)
                 shutil.rmtree(unzippath.joinpath(file.stem))
             # そのまま移動できる採点対象の形式のやつはそのまま移動（.py）
-            for innerfile in [f for f in unzippath.iterdir() if f.is_file() and (not f in self.exclude_files)]:
+            for innerfile in self._get_ValidFilePath(unzippath):
                 if innerfile.suffix in self.valid_filetype:
                     shutil.move(innerfile, innerfile.parent.parent.joinpath(innerfile.name))
             # dataフォルダがあった場合はそのまま採点対象フォルダに移動
@@ -519,7 +525,7 @@ class IP_Execute(Execute):
             shutil.rmtree(unzippath)
             
         # .txtと拡張子なしは想定してるので.pyに変えてコピーを作成
-        elif file.suffix in [".txt",""]:
+        else:
             shutil.copy(file, file.with_suffix(".py"))
             
             # コピー元のファイルを削除
@@ -530,10 +536,6 @@ class IP_Execute(Execute):
             else:
                 # 拡張子があるやつは移動
                 shutil.move(file, movepath)
-        else:
-            # どういう状態のファイルかわかんないので移動は人間に任せる
-            self._show_Message("Wait!", "想定していない形式があります。\n対応が終了するまでダイアログを消さないでください！\n\"{}\"".format(file.parent.name))
-            shutil.move(file, movepath)
             
         return super()._TypeNG_(file)
     
@@ -591,21 +593,22 @@ def check(classname: str, checkroot: Path, log: Path, input: Path = None):
             while 0 <= index < len(pathlist):
                 runner = IP_Execute(pathlist[index], log, input)
                 if runner.next_index == 0:
+                    runner.Close()
                     return
                 index += runner.next_index
             return
         
         case "AP":
-            return
+            pass
         
         case "MAS":
-            return
+            pass
 
 def get_checkpath(childtype: str, rootpath: Path, exclude_files: list) -> list:
     if childtype == "dir":
-        return [f for f in rootpath.iterdir() if f.is_dir()]
+        return sorted([f for f in rootpath.iterdir() if f.is_dir()])
     elif childtype == "file":
-        return [f for f in rootpath.iterdir() if f.is_file() if not f in exclude_files]
+        return sorted([f for f in rootpath.iterdir() if f.is_file() if not f.name in exclude_files])
 
 # MARK: Main process
 if __name__ == "__main__":
@@ -623,3 +626,5 @@ if __name__ == "__main__":
     
     check(checking_class.select_ClassName, check_setting.checkfolder_path, check_setting.logfiles, check_setting.autoinput_path)
     # check("IP", Path("/Users/nao/Desktop/手伝い/プログラミング基礎/採点/第07回演習/data"))
+    tkinter.Tk().withdraw()
+    messagebox.showinfo("", "お疲れ様でした")
