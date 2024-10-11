@@ -587,6 +587,58 @@ class IP_Execute(Execute):
             """
         return super().set_CloseScript()
 
+class AP_Execute(Execute):
+    def __init__(self, checkfolder: Path, logfiles: list, inputfolder: Path = "") -> None:
+        self.close_script = ""
+        self.autoinput_key_scriptfile = ""
+        
+        super().__init__(checkroot = checkfolder, \
+                        filetype = GLOBAL_SETTINGS.get("AP", "FILE_TYPE"), \
+                        namingRule = GLOBAL_SETTINGS.get("AP", "FILENAME_REGEX"), \
+                        runcommand = GLOBAL_SETTINGS.get("AP", "RUN_COMMAND"), \
+                        logfiles = logfiles, \
+                        inputroot = inputfolder 
+                        )
+        
+        self.set_CloseScript()
+        self.set_AutoInputScript_Key()
+        
+    def Run(self, file: Path):
+        applescript_code = f"""
+                        tell application "Terminal"
+                        activate
+                        set newWindow to do script "{self.run_command} {str(file)}"
+                        set custom title of newWindow to "{self.run_window_name}/{file.name}"
+                        set bounds of front window to {0, 0, 400, 320}
+                        end tell
+                    """
+        subprocess.Popen(["osascript", "-e", applescript_code])
+        return super().Run(file)
+        
+    def set_AutoInputScript_Key(self):
+        self.autoinput_key_scriptfile = Path("./autoinput_code/autoinput_key.py").absolute()
+        return super().set_AutoInputScript_Key()
+    
+    def set_CloseScript(self):
+        self.close_script = f"""
+                tell application "Terminal"
+                set all_windows to every window
+                repeat with cur_window in all_windows
+                    if name of cur_window contains "{self.run_window_name}" then
+                        tell cur_window
+                            activate
+                            tell application "System Events"
+                                keystroke "c" using control down
+                            end tell
+                            delay 1
+                            close cur_window
+                        end tell
+                    end if
+                end repeat
+            end tell
+            """
+        return super().set_CloseScript()
+
 # MARK: function
 def check(classname: str, checkroot: Path, log: Path, input: Path = None):
     childtype = GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE")
