@@ -82,6 +82,8 @@ class Settings:
 # MARK: Window Class
 class Window:
     def __init__(self, title: str, width: int = 300, height: int = 300,) -> None:
+        self.to_nextProcess = False
+        
         self.root = tkinter.Tk()
         self.root.title(title)
         margin_buttom = int(GLOBAL_SETTINGS.get("GENERAL", "UI_MARGIN_BOTTOM"))
@@ -89,6 +91,7 @@ class Window:
         self.root.configure(background="white")
         
     def Show(self) -> None :
+        self.root.protocol("WM_DELETE_WINDOW", self.Close)
         self.root.mainloop()
         
     def Write_Log(self, target: str, text: str) -> None:
@@ -140,10 +143,12 @@ class ClassSelect(Window):
                             padx=2, pady=2, relief=tkinter.RAISED, width=18, height=2, background='white', \
                             command=self._set_className(target)) \
                             .pack(padx=5, pady=5)
+        self.Show()
     
     def _set_className(self, target):
         def inner():
             self.select_ClassName = target
+            self.to_nextProcess = True
             self.Close()
         return inner
 
@@ -247,7 +252,7 @@ class CheckSetting(Window):
         if self.autoinput_path == "":
             if not self._ask_YesNo("", "自動入力対象が選択されていません。採点を開始してもよろしいですか"):
                 return
-        self.isStartCheck = 1
+        self.to_nextProcess = True
         
         self._setup_LogFiles()
         self._write_StartLog()
@@ -272,6 +277,8 @@ class Execute(Window):
             self.input_files_path = []
         else:
             self.input_files_path = self._get_InputFilePath(inputroot)
+            
+        self._open_vscode(checkroot)
         
         super().__init__(checkroot.name, *self._calc_WindowSize(len(self.check_files_path)+len(self.input_files_path)))
         
@@ -284,7 +291,7 @@ class Execute(Window):
                             command=self._Run_Button(file)) \
                             .pack(padx=5, pady=5)
                             
-        # TODO: 採点中に採点対象のフォルダを変更できるようにしたらいいかも
+        
         InputFrame = tkinter.Frame(self.root, relief=tkinter.FLAT, background='white')
         InputFrame.pack(fill=tkinter.BOTH, pady=10, padx=10)
         if len(self.input_files_path) == 0:
@@ -299,11 +306,11 @@ class Execute(Window):
                             
         progress_frame = tkinter.Frame(self.root, relief=tkinter.FLAT, background='white')
         progress_frame.pack(fill=tkinter.BOTH, pady=10, padx=10)
-        before_button = tkinter.Button(progress_frame, text="＜", font=('MSゴシック', '20'), padx=2, pady=2, width=8, background='white', command=self._goto_Before)
+        before_button = tkinter.Button(progress_frame, text="＜", font=('MSゴシック', '20'), padx=2, pady=2, width=8, background='white', command=self._goto(-1))
         before_button.pack(side=tkinter.LEFT)
-        next_button = tkinter.Button(progress_frame, text="＞", font=('MSゴシック', '20'), padx=2, pady=2, width=8, background='white', command=self._goto_next)
+        next_button = tkinter.Button(progress_frame, text="＞", font=('MSゴシック', '20'), padx=2, pady=2, width=8, background='white', command=self._goto(1))
         next_button.pack(side=tkinter.LEFT)
-        
+
         self.Show()
         
     def _calc_WindowSize(self, button_cnt):
@@ -358,6 +365,9 @@ class Execute(Window):
             return True
         else:
             return False
+    
+    def _open_vscode(self, folder: Path):
+        subprocess.Popen(["code", folder])
     
     def _Run_Button(self, file: Path):
         def inner():
@@ -427,17 +437,14 @@ class Execute(Window):
     def set_CloseScript(self):
         pass
     
-    def _goto_next(self):
-        self.next_index = 1
-        self._close_Window()
-        self.Write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogText(["End", self.run_window_name, "\n"]))
-        self.Close()
-    
-    def _goto_Before(self):
-        self.next_index = -1
-        self._close_Window()
-        self.Write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogText(["End", self.run_window_name, "\n"]))
-        self.Close()
+    def _goto(self, index: int):
+        def inner():
+            self.next_index = index
+            self.to_nextProcess = True
+            self._close_Window()
+            self.Write_Log(self.logfiles["Runtime"], self.generate_RuntimeLogText(["End", self.run_window_name, "\n"]))
+            self.Close()
+        return inner
         
 # MARK: IP Execute Class
 class IP_Execute(Execute):
@@ -590,13 +597,10 @@ def check(classname: str, checkroot: Path, log: Path, input: Path = None):
         case "IP":
             while 0 <= index < len(pathlist):
                 runner = IP_Execute(pathlist[index], log, input)
-                if runner.next_index == 0:
-                    runner.Write_Log(runner.logfiles["Runtime"], runner.generate_RuntimeLogText(["End", checkroot]))
-                    runner.Close()
+                if not runner.to_nextProcess:
+                    runner.Write_Log(runner.logfiles["Runtime"], runner.generate_RuntimeLogText(["End", str(checkroot)]))
                     return
-                index += runner.next_index
-            return
-        
+                index += runner.next_index  
         case "AP":
             pass
         
@@ -607,23 +611,25 @@ def get_checkpath(childtype: str, rootpath: Path, exclude_files: list) -> list:
     if childtype == "dir":
         return sorted([f for f in rootpath.iterdir() if f.is_dir()])
     elif childtype == "file":
-        return sorted([f for f in rootpath.iterdir() if f.is_file() if not f.name in exclude_files])
+        return sorted([f for f in rootpath.iterdir() if f.is_file() and (not f.name in exclude_files)])
 
 # MARK: Main process
 if __name__ == "__main__":
     # 設定読み込み
     GLOBAL_SETTINGS = Settings()
     
-    # 科目選択
-    checking_class = ClassSelect()
-    checking_class.Show()
-    if checking_class.select_ClassName == "":
-        exit()
-    
-    # 採点時の設定
-    check_setting = CheckSetting(checking_class.select_ClassName)
-    
-    check(checking_class.select_ClassName, check_setting.checkfolder_path, check_setting.logfiles, check_setting.autoinput_path)
+    while True:
+        # 科目選択
+        checking_class = ClassSelect()
+        if not checking_class.to_nextProcess:
+            break
+        
+        # 採点時の設定
+        check_setting = CheckSetting(checking_class.select_ClassName)
+        if not check_setting.to_nextProcess:
+            break
+        
+        check(checking_class.select_ClassName, check_setting.checkfolder_path, check_setting.logfiles, check_setting.autoinput_path)
 
     tkinter.Tk().withdraw()
     messagebox.showinfo("", "お疲れ様でした")
