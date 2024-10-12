@@ -603,6 +603,68 @@ class AP_Execute(Execute):
         self.set_CloseScript()
         self.set_AutoInputScript_Key()
         
+    def _NameOK_(self, file: Path):
+        studentNum = re.findall(r"\d{2}C\d{4}", file.parent.name)
+        studentNum.append(str(*studentNum).lower())
+        if not re.search("|".join(studentNum), file.name):
+            self.Write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name} 提出フォルダと学番が一致しません")
+        return super()._NameOK_(file)
+    
+    def _NameNG_(self, file: Path):
+        file.rename(file.with_name(str(file.name).replace(" ","_").replace("(","_").replace(")","_")))
+        return super()._NameNG_(file)
+    
+    def _TypeOK_(self, file: Path):
+        return super()._TypeOK_(file)
+    
+    def _TypeNG_(self, file: Path):
+        # valid filetype: .py
+        movepath = self.logfiles["dir_Badtype"].joinpath(file.parent.name)
+        if not movepath.exists():
+                movepath.mkdir()
+        if file.suffix == ".zip":
+            # 展開して中身を確認
+            shutil.unpack_archive(file, file.parent.joinpath("unzip"))
+            
+            # zipをbadtypeへ移動
+            shutil.move(file, movepath)
+            
+            # 展開先pathを格納
+            unzippath = file.parent.joinpath("unzip")
+            # ディレクトリが出てきたらunzipに移動
+            if unzippath.joinpath(file.stem).is_dir():
+                shutil.copytree(unzippath.joinpath(file.stem), unzippath, dirs_exist_ok=True)
+                shutil.rmtree(unzippath.joinpath(file.stem))
+            # そのまま移動できる採点対象の形式のやつはそのまま移動（.py）
+            for innerfile in self._get_ValidFilePath(unzippath):
+                if innerfile.suffix in self.valid_filetype:
+                    shutil.move(innerfile, innerfile.parent.parent.joinpath(innerfile.name))
+                else:
+                    shutil.copy(innerfile, innerfile.with_suffix(".py"))
+                    # コピー元のファイルを削除
+                    if innerfile.suffix == "":
+                        # 拡張子なしの場合はディレクトリとして認識されるので一旦.txtをつけてから移動して消す
+                        innerfile.rename(movepath.joinpath(innerfile.with_suffix(".txt").name))
+                        movepath.joinpath(innerfile.with_suffix(".txt").name).rename(movepath.joinpath(innerfile.name))
+                    else:
+                        # 拡張子があるやつは移動
+                        shutil.move(innerfile, movepath)
+            shutil.rmtree(unzippath)
+            
+        # .pyに変えてコピーを作成
+        else:
+            shutil.copy(file, file.with_suffix(".py"))
+            
+            # コピー元のファイルを削除
+            if file.suffix == "":
+                # 拡張子なしの場合はディレクトリとして認識されるので一旦.txtをつけてから移動して消す
+                file.rename(movepath.joinpath(file.with_suffix(".txt").name))
+                movepath.joinpath(file.with_suffix(".txt").name).rename(movepath.joinpath(file.name))
+            else:
+                # 拡張子があるやつは移動
+                shutil.move(file, movepath)
+        return super()._TypeNG_(file)
+        
     def Run(self, file: Path):
         applescript_code = f"""
                         tell application "Terminal"
