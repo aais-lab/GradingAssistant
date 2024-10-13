@@ -706,20 +706,18 @@ def check(classname: str, checkroot: Path, log: Path, input: Path = None):
     childtype = GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE")
     pathlist = get_checkpath(childtype, checkroot, GLOBAL_SETTINGS.get("GENERAL", "EXCLUDE_FILE_NAME"))
     index = 0
-    
-    match classname.upper():
-        case "IP":
-            while 0 <= index < len(pathlist):
-                runner = IP_Execute(pathlist[index], log, input)
-                if not runner.to_nextProcess:
-                    runner.Write_Log(runner.logfiles["Runtime"], runner.generate_RuntimeLogText(["End", str(checkroot)]))
-                    return
-                index += runner.next_index  
-        case "AP":
-            pass
-        
-        case "MAS":
-            pass
+    while 0 <= index < len(pathlist): 
+        match classname.upper():
+            case "IP":
+                    runner = IP_Execute(pathlist[index], log, input)
+            case "AP":
+                    runner = AP_Execute(pathlist[index], log, input)
+            case "MAS":
+                pass
+        if not runner.to_nextProcess:
+            runner.Write_Log(runner.logfiles["Runtime"], runner.generate_RuntimeLogText(["End", str(checkroot)]))
+            break
+        index += runner.next_index
 
 def get_checkpath(childtype: str, rootpath: Path, exclude_files: list) -> list:
     if childtype == "dir":
