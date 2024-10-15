@@ -465,7 +465,6 @@ class IP_Execute(Execute):
     
     def _NameOK_(self, file: Path):
         studentNum = re.findall(r"\d{2}C\d{4}", file.parent.name)
-        studentNum.append(str(*studentNum).lower())
         if not re.search("|".join(studentNum), file.name):
             self.Write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name} 提出フォルダと学番が一致しません")
         return super()._NameOK_(file)
@@ -605,7 +604,6 @@ class AP_Execute(Execute):
         
     def _NameOK_(self, file: Path):
         studentNum = re.findall(r"\d{2}C\d{4}", file.parent.name)
-        studentNum.append(str(*studentNum).lower())
         if not re.search("|".join(studentNum), file.name):
             self.Write_Log(self.logfiles["Badname"], f"{file.parent.name}\t{file.name} 提出フォルダと学番が一致しません")
         return super()._NameOK_(file)
@@ -704,7 +702,7 @@ class AP_Execute(Execute):
 # MARK: function
 def check(classname: str, checkroot: Path, log: Path, input: Path = None):
     childtype = GLOBAL_SETTINGS.get(classname.upper(), "CHILD_TYPE")
-    pathlist = get_checkpath(childtype, checkroot, GLOBAL_SETTINGS.get("GENERAL", "EXCLUDE_FILE_NAME"))
+    pathlist = get_checkpath(childtype, checkroot, GLOBAL_SETTINGS.get("GENERAL", "EXCLUDED_FILE_NAME"))
     index = 0
     while 0 <= index < len(pathlist): 
         match classname.upper():
